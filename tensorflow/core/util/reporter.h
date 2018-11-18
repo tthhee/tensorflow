@@ -1,4 +1,4 @@
-/* Copyright 2016 Google Inc. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,22 +29,24 @@ limitations under the License.
 
 namespace tensorflow {
 
-// The TestReporter writes test / benchmark output to text Protobuf files
-// when the environment variable "TEST_REPORT_FILE_PREFIX" is defined.
+// The TestReporter writes test / benchmark output to binary Protobuf files when
+// the environment variable "TEST_REPORT_FILE_PREFIX" is defined.
 //
 // If this environment variable is not defined, no logging is performed.
 //
-// The intended use is via the following 4 lines:
+// The intended use is via the following lines:
 //
 //  TestReporter reporter(test_name);
 //  TF_CHECK_OK(reporter.Initialize()));
 //  TF_CHECK_OK(reporter.Benchmark(iters, cpu_time, wall_time, throughput));
+//  TF_CHECK_OK(reporter.SetProperty("some_string_property", "some_value");
+//  TF_CHECK_OK(reporter.SetProperty("some_double_property", double_value);
 //  TF_CHECK_OK(reporter.Close());
 //
 // For example, if the environment variable
 //   TEST_REPORT_FILE_PREFIX="/tmp/run_"
-// is set, and test_name is "BM_Foo/1/2", then a BenchmarkEntry pbtxt
-// is written to file:
+// is set, and test_name is "BM_Foo/1/2", then a BenchmarkEntries pb
+// with a single entry is written to file:
 //   /tmp/run_BM_Foo__1__2
 //
 class TestReporter {
@@ -75,7 +77,14 @@ class TestReporter {
   Status Benchmark(int64 iters, double cpu_time, double wall_time,
                    double throughput);
 
-  ~TestReporter() { Close(); }  // Autoclose in destructor.
+  // Set property on Benchmark to the given value.
+  Status SetProperty(const string& name, double value);
+
+  // Set property on Benchmark to the given value.
+  Status SetProperty(const string& name, const string& value);
+
+  // TODO(b/32704451): Don't just ignore the ::tensorflow::Status object!
+  ~TestReporter() { Close().IgnoreError(); }  // Autoclose in destructor.
 
  private:
   static string GetLogEnv() {
