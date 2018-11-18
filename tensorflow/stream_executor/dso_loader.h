@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,15 +22,13 @@ limitations under the License.
 #include "tensorflow/stream_executor/platform/port.h"
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "tensorflow/stream_executor/lib/status.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
-#include "tensorflow/stream_executor/lib/stringpiece.h"
 #include "tensorflow/stream_executor/platform.h"
 #include "tensorflow/stream_executor/platform/mutex.h"
-#include "tensorflow/stream_executor/platform/port.h"
 
-namespace perftools {
-namespace gputools {
+namespace stream_executor {
 namespace internal {
 
 // Permits StreamExecutor code to dynamically load a pre-determined set of
@@ -50,12 +48,11 @@ class DsoLoader {
   static port::Status GetLibcuptiDsoHandle(void** dso_handle);
 
   // Registers a new binary-relative path to use as a dlopen search path.
-  static void RegisterRpath(port::StringPiece path);
+  static void RegisterRpath(absl::string_view path);
 
  private:
   // Registered rpaths (singleton vector) and a mutex that guards it.
   static std::vector<string>* GetRpaths();
-  static mutex rpath_mutex_;
 
   // Descriptive boolean wrapper to indicate whether symbols are made available
   // to resolve in later-loaded libraries.
@@ -64,19 +61,13 @@ class DsoLoader {
   // Loads a DSO from the given "path" (which can technically be any dlopen-able
   // name). If the load kind is global, the symbols in the loaded DSO are
   // visible to subsequent DSO loading operations.
-  static port::Status GetDsoHandle(port::StringPiece path, void** dso_handle,
+  static port::Status GetDsoHandle(absl::string_view path, void** dso_handle,
                                    LoadKind load_kind = LoadKind::kLocal);
-
 
   // Returns the binary directory (or binary path) associated with the currently
   // executing program. If strip_executable_name is true, the executable file is
   // stripped off of the path.
   static string GetBinaryDirectory(bool strip_executable_name);
-
-  // Returns the location of the runfiles directory.
-  // * Manual invocation gets the runfiles as a relative path to the current
-  //   executable.
-  static string GetRunfilesDirectory();
 
   // Invokes realpath on the original path; updates candidate and returns true
   // if it succeeds (i.e. a file exists at the path); otherwise, returns false.
@@ -88,8 +79,13 @@ class DsoLoader {
   //   library_name: the filename in tree; e.g. libOpenCL.so.1.0.0
   //   runfiles_relpath: where to look for the library relative to the runfiles
   //      root; e.g. third_party/gpus/cuda/lib64
-  static string FindDsoPath(port::StringPiece library_name,
-                            port::StringPiece runfiles_relpath);
+  static string FindDsoPath(absl::string_view library_name,
+                            absl::string_view runfiles_relpath);
+
+  // Return platform dependent paths for DSOs
+  static string GetCudaLibraryDirPath();
+  static string GetCudaDriverLibraryPath();
+  static string GetCudaCuptiLibraryPath();
 
   SE_DISALLOW_COPY_AND_ASSIGN(DsoLoader);
 };
@@ -116,7 +112,6 @@ class CachedDsoLoader {
 };
 
 }  // namespace internal
-}  // namespace gputools
-}  // namespace perftools
+}  // namespace stream_executor
 
 #endif  // TENSORFLOW_STREAM_EXECUTOR_DSO_LOADER_H_

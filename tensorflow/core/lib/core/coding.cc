@@ -1,4 +1,4 @@
-/* Copyright 2015 Google Inc. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,10 +15,19 @@ limitations under the License.
 
 #include "tensorflow/core/lib/core/coding.h"
 
-#include "tensorflow/core/platform/host_info.h"
+#include "tensorflow/core/platform/byte_order.h"
 
 namespace tensorflow {
 namespace core {
+
+void EncodeFixed16(char* buf, uint16 value) {
+  if (port::kLittleEndian) {
+    memcpy(buf, &value, sizeof(value));
+  } else {
+    buf[0] = value & 0xff;
+    buf[1] = (value >> 8) & 0xff;
+  }
+}
 
 void EncodeFixed32(char* buf, uint32 value) {
   if (port::kLittleEndian) {
@@ -44,6 +53,12 @@ void EncodeFixed64(char* buf, uint64 value) {
     buf[6] = (value >> 48) & 0xff;
     buf[7] = (value >> 56) & 0xff;
   }
+}
+
+void PutFixed16(string* dst, uint16 value) {
+  char buf[sizeof(value)];
+  EncodeFixed16(buf, value);
+  dst->append(buf, sizeof(buf));
 }
 
 void PutFixed32(string* dst, uint32 value) {
@@ -133,14 +148,14 @@ const char* GetVarint32PtrFallback(const char* p, const char* limit,
       return reinterpret_cast<const char*>(p);
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 bool GetVarint32(StringPiece* input, uint32* value) {
   const char* p = input->data();
   const char* limit = p + input->size();
   const char* q = GetVarint32Ptr(p, limit, value);
-  if (q == NULL) {
+  if (q == nullptr) {
     return false;
   } else {
     *input = StringPiece(q, limit - q);
@@ -162,14 +177,14 @@ const char* GetVarint64Ptr(const char* p, const char* limit, uint64* value) {
       return reinterpret_cast<const char*>(p);
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 bool GetVarint64(StringPiece* input, uint64* value) {
   const char* p = input->data();
   const char* limit = p + input->size();
   const char* q = GetVarint64Ptr(p, limit, value);
-  if (q == NULL) {
+  if (q == nullptr) {
     return false;
   } else {
     *input = StringPiece(q, limit - q);

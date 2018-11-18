@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,14 +26,14 @@ from tensorflow.python.platform import googletest
 class DeviceTest(test_util.TensorFlowTestCase):
 
   def testEmpty(self):
-    d = device.Device()
+    d = device.DeviceSpec()
     self.assertEquals("", d.to_string())
     d.parse_from_string("")
     self.assertEquals("", d.to_string())
 
   def testConstructor(self):
-    d = device.Device(job="j", replica=0, task=1,
-                      device_type="CPU", device_index=2)
+    d = device.DeviceSpec(job="j", replica=0, task=1,
+                          device_type="CPU", device_index=2)
     self.assertEqual("j", d.job)
     self.assertEqual(0, d.replica)
     self.assertEqual(1, d.task)
@@ -41,11 +41,11 @@ class DeviceTest(test_util.TensorFlowTestCase):
     self.assertEqual(2, d.device_index)
     self.assertEqual("/job:j/replica:0/task:1/device:CPU:2", d.to_string())
 
-    d = device.Device(device_type="GPU", device_index=0)
+    d = device.DeviceSpec(device_type="GPU", device_index=0)
     self.assertEquals("/device:GPU:0", d.to_string())
 
   def testto_string(self):
-    d = device.Device()
+    d = device.DeviceSpec()
     d.job = "foo"
     self.assertEquals("/job:foo", d.to_string())
     d.task = 3
@@ -68,51 +68,52 @@ class DeviceTest(test_util.TensorFlowTestCase):
     self.assertEquals("/job:foo/replica:12", d.to_string())
 
     # Test wildcard
-    d = device.Device(job="foo", replica=12, task=3, device_type="GPU")
+    d = device.DeviceSpec(job="foo", replica=12, task=3, device_type="GPU")
     self.assertEquals("/job:foo/replica:12/task:3/device:GPU:*", d.to_string())
 
   def testParse(self):
-    d = device.Device()
+    d = device.DeviceSpec()
     d.parse_from_string("/job:foo/replica:0")
     self.assertEquals("/job:foo/replica:0", d.to_string())
     d.parse_from_string("/replica:1/task:0/cpu:0")
     self.assertEquals("/replica:1/task:0/device:CPU:0", d.to_string())
     d.parse_from_string("/replica:1/task:0/device:CPU:0")
     self.assertEquals("/replica:1/task:0/device:CPU:0", d.to_string())
-    d.parse_from_string("/job:muu/gpu:2")
+    d.parse_from_string("/job:muu/device:GPU:2")
     self.assertEquals("/job:muu/device:GPU:2", d.to_string())
     with self.assertRaises(Exception) as e:
-      d.parse_from_string("/job:muu/gpu:2/cpu:0")
+      d.parse_from_string("/job:muu/device:GPU:2/cpu:0")
     self.assertTrue("Cannot specify multiple device" in str(e.exception))
 
   def testFromString(self):
-    d = device.from_string("/job:foo/replica:0")
+    d = device.DeviceSpec.from_string("/job:foo/replica:0")
     self.assertEquals("/job:foo/replica:0", d.to_string())
     with self.assertRaises(Exception) as e:
-      d = device.from_string("/job:muu/gpu:2/cpu:0")
+      d = device.DeviceSpec.from_string("/job:muu/device:GPU:2/cpu:0")
     self.assertTrue("Cannot specify multiple device" in str(e.exception))
 
-    d = device.from_string("/job:foo/replica:0/task:3/cpu:*")
+    d = device.DeviceSpec.from_string("/job:foo/replica:0/task:3/cpu:*")
     self.assertEquals(None, d.device_index)
-    d = device.from_string("/job:foo/replica:0/task:3/gpu:7")
+    d = device.DeviceSpec.from_string("/job:foo/replica:0/task:3/gpu:7")
     self.assertEquals(7, d.device_index)
-    d = device.from_string("/job:foo/replica:0/task:3/device:GPU:7")
+    d = device.DeviceSpec.from_string("/job:foo/replica:0/task:3/device:GPU:7")
     self.assertEquals(7, d.device_index)
 
   def testMerge(self):
-    d = device.from_string("/job:foo/replica:0")
+    d = device.DeviceSpec.from_string("/job:foo/replica:0")
     self.assertEquals("/job:foo/replica:0", d.to_string())
-    d.merge_from(device.from_string("/task:1/gpu:2"))
+    d.merge_from(device.DeviceSpec.from_string("/task:1/device:GPU:2"))
     self.assertEquals("/job:foo/replica:0/task:1/device:GPU:2", d.to_string())
 
-    d = device.Device()
-    d.merge_from(device.from_string("/task:1/cpu:0"))
+    d = device.DeviceSpec()
+    d.merge_from(device.DeviceSpec.from_string("/task:1/cpu:0"))
     self.assertEquals("/task:1/device:CPU:0", d.to_string())
-    d.merge_from(device.from_string("/job:boo/gpu:0"))
+    d.merge_from(device.DeviceSpec.from_string("/job:boo/device:GPU:0"))
     self.assertEquals("/job:boo/task:1/device:GPU:0", d.to_string())
-    d.merge_from(device.from_string("/job:muu/cpu:2"))
+    d.merge_from(device.DeviceSpec.from_string("/job:muu/cpu:2"))
     self.assertEquals("/job:muu/task:1/device:CPU:2", d.to_string())
-    d.merge_from(device.from_string("/job:muu/device:MyFunnyDevice:2"))
+    d.merge_from(device.DeviceSpec.from_string(
+        "/job:muu/device:MyFunnyDevice:2"))
     self.assertEquals("/job:muu/task:1/device:MyFunnyDevice:2", d.to_string())
 
   def testCanonicalName(self):
@@ -133,10 +134,10 @@ class DeviceTest(test_util.TensorFlowTestCase):
 
     self.assertEqual("/job:foo/replica:0/task:0/device:GPU:0",
                      device.canonical_name(
-                         "/job:foo/replica:0/task:0/gpu:0"))
+                         "/job:foo/replica:0/task:0/device:GPU:0"))
     self.assertEqual("/job:foo/replica:0/task:0/device:GPU:0",
                      device.canonical_name(
-                         "/gpu:0/task:0/replica:0/job:foo"))
+                         "/device:GPU:0/task:0/replica:0/job:foo"))
 
   def testCheckValid(self):
     device.check_valid("/job:foo/replica:0")
@@ -154,7 +155,7 @@ class DeviceTest(test_util.TensorFlowTestCase):
     self.assertTrue("Unknown attribute: 'bar'" in str(e.exception))
 
     with self.assertRaises(Exception) as e:
-      device.check_valid("/cpu:0/gpu:2")
+      device.check_valid("/cpu:0/device:GPU:2")
     self.assertTrue("Cannot specify multiple device" in str(e.exception))
 
 
