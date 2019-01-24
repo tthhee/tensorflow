@@ -64,7 +64,10 @@ bool SupportsQuantization(const Operator& op) {
          type == OperatorType::kRelu1 || type == OperatorType::kRelu6 ||
          type == OperatorType::kShape || type == OperatorType::kExpandDims ||
          type == OperatorType::kPack || type == OperatorType::kTopK_V2 ||
-         type == OperatorType::kResizeNearestNeighbor;
+         type == OperatorType::kRandomUniform ||
+         type == OperatorType::kResizeNearestNeighbor ||
+         type == OperatorType::kPRelu || type == OperatorType::kReduceMax ||
+         type == OperatorType::kReduceMin;
 }
 
 // The quantized op allows output arrays of type float using
@@ -360,7 +363,7 @@ bool ChooseQuantizationForOperatorOutput(
       op.type == OperatorType::kSpaceToDepth ||
       op.type == OperatorType::kReshape || op.type == OperatorType::kSplit ||
       op.type == OperatorType::kRelu || op.type == OperatorType::kRelu1 ||
-      op.type == OperatorType::kRelu6) {
+      op.type == OperatorType::kRelu6 || op.type == OperatorType::kPRelu) {
     int data_input_index = 0;
     if (op.type == OperatorType::kSplit) {
       data_input_index = 1;

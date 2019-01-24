@@ -180,8 +180,8 @@ class _ContextSwitchStack(threading.local):
   def push(self, is_building_function, enter_context_fn):
     """Push metadata about a context switch onto the stack.
 
-    A context switch can take one of two forms: installing a graph as the
-    default graph, or entering the eager context. For each context switch,
+    A context switch can take any one of the two forms: installing a graph as
+    the default graph, or entering the eager context. For each context switch,
     we record whether or not the entered context is building a function.
 
     Args:
@@ -265,6 +265,7 @@ class Context(object):
       execution_mode = SYNC
     self._execution_mode = execution_mode
     self._server_def = server_def
+    self._collective_ops_server_def = None
 
   # pylint: enable=redefined-outer-name
 
@@ -325,9 +326,16 @@ class Context(object):
         self._context_handle = pywrap_tensorflow.TFE_NewContext(opts)
       finally:
         pywrap_tensorflow.TFE_DeleteContextOptions(opts)
+      assert not (self._server_def and self._collective_ops_server_def), (
+          "Cannot enable remote execution as well as collective ops at the "
+          "moment. If this is important to you, please file an issue.")
       if self._server_def is not None:
         server_def_str = self._server_def.SerializeToString()
         pywrap_tensorflow.TFE_ContextSetServerDef(self._context_handle, 600,
+                                                  server_def_str)
+      elif self._collective_ops_server_def is not None:
+        server_def_str = self._collective_ops_server_def.SerializeToString()
+        pywrap_tensorflow.TFE_EnableCollectiveOps(self._context_handle,
                                                   server_def_str)
 
       self._initialize_devices()
@@ -368,6 +376,30 @@ class Context(object):
       # Clear all the caches in case there are remote tensors in them.
       self._clear_caches()
 
+      self._initialize_devices()
+
+  def enable_collective_ops(self, server_def):
+    """Enable collective ops with an appropriate server_def.
+
+    If previously enabled, this cannot be re-enabled.
+
+    Args:
+      server_def: A tensorflow::ServerDef proto. Enables execution on remote
+        devices.
+
+    Raises:
+      ValueError: if server_def is None.
+    """
+    if not server_def:
+      raise ValueError("server_def is None.")
+    if not self._context_handle:
+      self._collective_ops_server_def = server_def
+    else:
+      server_def_str = server_def.SerializeToString()
+      pywrap_tensorflow.TFE_EnableCollectiveOps(self._context_handle,
+                                                server_def_str)
+
+      self._clear_caches()
       self._initialize_devices()
 
   @property
@@ -478,10 +510,6 @@ class Context(object):
     Raises:
       ValueError: If name is not a string or is an invalid device name.
     """
-    devices = self._context_devices
-    if devices is None:
-      self._initialize_handle_and_devices()
-      devices = self._context_devices
     eager_context = self._eager_context
     old_device_name = eager_context.device_name
     old_device_spec = eager_context.device_spec
@@ -502,7 +530,9 @@ class Context(object):
         if old_device_name:
           new_device_spec = copy.copy(old_device_spec)
         else:
-          new_device_spec = pydev.DeviceSpec.from_string(devices[0])
+          self._initialize_handle_and_devices()
+          new_device_spec = pydev.DeviceSpec.from_string(
+              self._context_devices[0])
         new_device_spec.merge_from(device_spec)
       else:
         new_device_spec = pydev.DeviceSpec.from_string("")
@@ -612,6 +642,10 @@ class Context(object):
     fdef_string = fdef.SerializeToString()
     pywrap_tensorflow.TFE_ContextAddFunctionDef(
         self._handle, fdef_string, len(fdef_string))
+
+  def has_function(self, name):
+    """Check if a function `name` is registered."""
+    return bool(pywrap_tensorflow.TFE_ContextHasFunction(self._handle, name))
 
   def add_post_execution_callback(self, callback):
     """Add a post-execution callback to the context.
@@ -756,6 +790,27 @@ def executing_eagerly():
 def in_eager_mode():
   """Use executing_eagerly() instead. This function will be removed."""
   return executing_eagerly()
+
+
+def shared_name(name=None):
+  """Returns the anonymous shared name GUID if no shared name is specified.
+
+  In eager mode we need to use a unique shared name to avoid spurious sharing
+  issues. The runtime generates a unique name on our behalf when the reserved
+  GUID is used as a shared name.
+
+  Args:
+    name: Optional shared name
+
+  Returns:
+    Eager compatible shared name.
+  """
+  if name or not executing_eagerly():
+    return name
+
+  # Ensure a unique name when eager execution is enabled to avoid spurious
+  # sharing issues.
+  return "cd2c89b7-88b7-44c8-ad83-06c2a9158347"
 
 
 def graph_mode():
@@ -925,6 +980,10 @@ def add_function(fdef):
 # but they do all import this file.  Note that IS_IN_GRAPH_MODE and
 # in_graph_mode are both parameterless functions.
 def _tmp_in_graph_mode():
+  if context_safe() is None:
+    # Context not yet initialized. Assume graph mode following the
+    # default implementation in `is_in_graph_mode`.
+    return True
   return not executing_eagerly()
 
 

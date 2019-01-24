@@ -5,15 +5,7 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "DropoutWrapper"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "LSTMStateTuple"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "MultiRNNCell"
     mtype: "<type \'type\'>"
   }
   member {

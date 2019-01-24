@@ -247,6 +247,11 @@ bool IsIdentityNSingleInput(const NodeDef& node) {
          node.attr().at("T").list().type_size() == 1;
 }
 
+bool IsIf(const NodeDef& node) {
+  const auto& op = node.op();
+  return op == "If" || op == "StatelessIf";
+}
+
 bool IsIgamma(const NodeDef& node) { return node.op() == "Igamma"; }
 
 bool IsIgammac(const NodeDef& node) { return node.op() == "Igammac"; }
@@ -524,6 +529,11 @@ bool IsVariable(const NodeDef& node) {
          op == "VarHandleOp" || op == "ReadVariableOp";
 }
 
+bool IsWhile(const NodeDef& node) {
+  const auto& op = node.op();
+  return op == "While" || op == "StatelessWhile";
+}
+
 bool IsZeta(const NodeDef& node) { return node.op() == "Zeta"; }
 
 namespace {
@@ -551,14 +561,38 @@ bool MaybeHasRefInput(const NodeDef& node) {
   return false;
 }
 
-bool IsFreeOfSideEffect(const NodeDef& node) {
+bool IsDataset(const NodeDef& node) {
+  const string& op = node.op();
+  // See `GetNodeClassForOp` in core/graph/graph.cc.
+  return op == "IteratorGetNext" || op == "IteratorGetNextSync" ||
+         op == "DatasetToSingleElement" || op == "ReduceDataset";
+}
+
+bool IsStateful(const NodeDef node, const OpRegistryInterface* op_registry) {
+  const OpDef* op_def = nullptr;
+  const string& op_name = node.op();
+  Status status = op_registry->LookUpOpDef(op_name, &op_def);
+  if (!status.ok()) {
+    LOG(WARNING) << "Failed to lookup OpDef for " << op_name
+                 << ". Error: " << status.error_message();
+    return false;
+  }
+  return op_def->is_stateful();
+}
+
+bool IsStateful(const NodeDef node) {
+  return IsStateful(node, OpRegistry::Global());
+}
+
+bool IsFreeOfSideEffect(const NodeDef& node,
+                        const OpRegistryInterface* op_registry) {
   // Placeholders must be preserved to keep the graph feedable.
   if (IsPlaceholder(node)) {
     return false;
   }
   const OpDef* op_def = nullptr;
   const string& op_name = node.op();
-  Status status = OpRegistry::Global()->LookUpOpDef(op_name, &op_def);
+  Status status = op_registry->LookUpOpDef(op_name, &op_def);
   if (!status.ok()) {
     return false;
   }
@@ -580,6 +614,10 @@ bool IsFreeOfSideEffect(const NodeDef& node) {
     return false;
   }
   return !ModifiesInputsInPlace(node);
+}
+
+bool IsFreeOfSideEffect(const NodeDef& node) {
+  return IsFreeOfSideEffect(node, OpRegistry::Global());
 }
 
 bool ModifiesInputsInPlace(const NodeDef& node) {
@@ -691,7 +729,6 @@ bool IsUnaryElementWise(const NodeDef& node) {
           "Asin",
           "Asinh",
           "Atan",
-          "Atan2",
           "Atanh",
           "Ceil",
           "ComplexAbs",

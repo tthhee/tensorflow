@@ -356,8 +356,7 @@ void SequentialHloOrdering::Initialize() {
   // Create a map from instruction to its order position.
   TF_DCHECK_OK(schedule_.Verify());
   for (const auto& computation_sequence : schedule_.sequences()) {
-    const std::vector<const HloInstruction*>& order =
-        computation_sequence.second.instructions();
+    const auto& order = computation_sequence.second.instructions();
     for (int i = 0; i < order.size(); ++i) {
       InsertOrDie(&order_position_, order[i], i);
     }
@@ -368,7 +367,7 @@ bool SequentialHloOrdering::ExecutesBeforeInSameComputation(
     const HloInstruction* a, const HloInstruction* b) const {
   CHECK_EQ(a->parent(), b->parent());
   // If either instruction is not in the order, then 'a' and 'b' are unordered.
-  if (order_position_.count(a) == 0 || order_position_.count(b) == 0) {
+  if (!order_position_.contains(a) || !order_position_.contains(b)) {
     return false;
   }
   return order_position_.at(a) < order_position_.at(b);

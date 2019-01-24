@@ -24,6 +24,7 @@ from tensorflow.core.framework import attr_value_pb2
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import iterator_ops
+from tensorflow.python.eager import context
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors
@@ -57,6 +58,7 @@ def simple_scoped_fn(a, x):
 
 
 @test_util.with_control_flow_v2
+@test_util.disable_all_xla("This test never passed for XLA")
 class FunctionalOpsTest(test.TestCase):
 
   @test_util.run_in_graph_and_eager_modes
@@ -101,6 +103,7 @@ class FunctionalOpsTest(test.TestCase):
                              (elems, other_elems), initializer)
     self.assertAllEqual([1.0, 2.0, 3.0], self.evaluate(r))
 
+  @test_util.run_deprecated_v1
   def testFoldl_Scoped(self):
     with self.cached_session() as sess:
       with variable_scope.variable_scope("root") as varscope:
@@ -153,6 +156,7 @@ class FunctionalOpsTest(test.TestCase):
                              initializer)
     self.assertAllEqual(1, self.evaluate(r))
 
+  @test_util.run_deprecated_v1
   def testFoldr_Scoped(self):
     with self.cached_session() as sess:
       with variable_scope.variable_scope("root") as varscope:
@@ -173,6 +177,7 @@ class FunctionalOpsTest(test.TestCase):
         self.assertAllEqual(1282, self.evaluate(r))
 
   # pylint: disable=unnecessary-lambda
+  @test_util.run_deprecated_v1
   def testFold_Grad(self):
     with self.cached_session():
       elems = constant_op.constant([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], name="data")
@@ -197,6 +202,13 @@ class FunctionalOpsTest(test.TestCase):
     self.assertAllEqual(
         np.array([(x + 3) * 2 for x in nums]), self.evaluate(r))
 
+  def testMapDtypeEager(self):
+    with context.eager_mode():
+      dtype = functional_ops.map_fn(lambda x: constant_op.constant(""),
+                                    constant_op.constant([]),
+                                    dtype=dtypes.string).dtype
+      self.assertEqual(dtype, dtypes.string)
+
   def testMapSparseTensor(self):
     with self.cached_session():
       with self.assertRaises(TypeError):
@@ -214,6 +226,7 @@ class FunctionalOpsTest(test.TestCase):
     with self.assertRaisesRegexp(ValueError, "not a scalar"):
       functional_ops.map_fn(lambda x: x, 1)
 
+  @test_util.run_deprecated_v1
   def testMap_Scoped(self):
     with self.cached_session() as sess:
 
@@ -245,6 +258,7 @@ class FunctionalOpsTest(test.TestCase):
         self.assertEqual(len(variables.trainable_variables()), 1)
         self.assertAllEqual(doubles, self.evaluate(r))
 
+  @test_util.run_deprecated_v1
   def testMap_Grad(self):
     with self.cached_session():
       param = constant_op.constant(2.0)
@@ -381,6 +395,7 @@ class FunctionalOpsTest(test.TestCase):
         ValueError, "two structures don't have the same nested structure"):
       functional_ops.scan(lambda a, x: (a, -a), elems, initializer)
 
+  @test_util.run_deprecated_v1
   def testScan_Scoped(self):
     with self.cached_session() as sess:
       with variable_scope.variable_scope("root") as varscope:
@@ -425,6 +440,7 @@ class FunctionalOpsTest(test.TestCase):
     #   t_1 == 1, b == 4.5,       y == 0.5, returns b * y * x = 9
     self.assertAllClose([1., 1., 2.25, 9.], self.evaluate(r))
 
+  @test_util.run_deprecated_v1
   def testScan_Control(self):
     with self.cached_session() as sess:
       s = array_ops.placeholder(dtypes.float32, shape=[None])
@@ -436,6 +452,7 @@ class FunctionalOpsTest(test.TestCase):
           np.array([1.0, 3.0, 9.0]), sess.run(c, {s: [1, 3, 3],
                                                   b: True}))
 
+  @test_util.run_deprecated_v1
   def testScan_Grad(self):
     with self.cached_session():
       elems = constant_op.constant([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], name="data")
@@ -448,6 +465,7 @@ class FunctionalOpsTest(test.TestCase):
       r = gradients_impl.gradients(r, v)[0]
       self.assertAllEqual(873.0, self.evaluate(r))
 
+  @test_util.run_deprecated_v1
   def testScanGradientWithPartStopGradient(self):
     a = variables.Variable(0.0, name="a")
     b = variables.Variable(0.0, name="b")
@@ -457,8 +475,8 @@ class FunctionalOpsTest(test.TestCase):
     loss = l0 + array_ops.stop_gradient(l1)
     grad = gradients_impl.gradients(ys=[loss], xs=[a, b])
     with self.test_session(use_gpu=True) as sess:
-      variables.global_variables_initializer().run()
-      sess.run(grad)
+      self.evaluate(variables.global_variables_initializer())
+      self.evaluate(grad)
 
   @test_util.run_in_graph_and_eager_modes
   def testFoldShape(self):
@@ -477,6 +495,7 @@ class FunctionalOpsTest(test.TestCase):
     y = functional_ops.map_fn(lambda e: e, x)
     self.assertAllEqual(y.get_shape(), self.evaluate(y).shape)
 
+  @test_util.run_deprecated_v1
   def testMapUnknownShape(self):
     x = array_ops.placeholder(dtypes.float32)
     y = functional_ops.map_fn(lambda e: e, x)
@@ -484,6 +503,7 @@ class FunctionalOpsTest(test.TestCase):
 
   @test_util.disable_control_flow_v2("b/119323354")
   @test_util.run_in_graph_and_eager_modes
+  @test_util.run_v1_only("b/120545219")
   def testMapEmptyScalar(self):
     map_return = functional_ops.map_fn(lambda x: 1, constant_op.constant([]))
     self.assertAllEqual([0], map_return.get_shape().dims)
@@ -492,6 +512,7 @@ class FunctionalOpsTest(test.TestCase):
   # TODO(akshayka): this test fails in eager: the iterable is of length 0 so
   # so the body of the while loop never executes
   @test_util.disable_control_flow_v2("b/119323354")
+  @test_util.run_v1_only("b/120545219")
   def testMapEmptyTensor(self):
     with self.cached_session():
       map_return = functional_ops.map_fn(lambda x: array_ops.zeros([3, 2]),
@@ -512,6 +533,7 @@ class FunctionalOpsTest(test.TestCase):
 
   # TODO(akshayka): this test fails in eager: the iterable is of length 0 so
   # so the body of the while loop never executes
+  @test_util.run_deprecated_v1
   def testScanEmptyTensor(self):
     with self.cached_session():
       x = functional_ops.scan(
@@ -519,6 +541,7 @@ class FunctionalOpsTest(test.TestCase):
       self.assertAllEqual([0, 2, 4], x.get_shape())
       self.assertAllEqual(x.get_shape(), self.evaluate(x).shape)
 
+  @test_util.run_deprecated_v1
   def testScanUnknownShape(self):
     x = array_ops.placeholder(dtypes.float32)
     initializer = array_ops.placeholder(dtypes.float32)
@@ -529,6 +552,7 @@ class FunctionalOpsTest(test.TestCase):
     y = functional_ops.scan(fn, x, initializer=initializer)
     self.assertIs(None, y.get_shape().dims)
 
+  @test_util.run_deprecated_v1
   def testScanVaryingShape(self):
     with self.cached_session() as sess:
       x = array_ops.placeholder(dtype=dtypes.float32, shape=[None, 2])
@@ -545,6 +569,7 @@ class FunctionalOpsTest(test.TestCase):
       sess.run([result, result_t, result_grad, result_t_grad],
                feed_dict={x: [[1.0, 2.0]]})
 
+  @test_util.run_deprecated_v1
   def testRemoteFunction(self):
     worker_config = config_pb2.ConfigProto()
     worker_config.device_count["CPU"] = 2
@@ -567,10 +592,11 @@ class FunctionalOpsTest(test.TestCase):
           target="/job:worker/replica:0/task:0/cpu:1")
 
     with session.Session(worker[0].target) as sess:
-      sess.run(variables.global_variables_initializer())
-      mul = sess.run(remote_op)
+      self.evaluate(variables.global_variables_initializer())
+      mul = self.evaluate(remote_op)
       self.assertEqual(mul, [6])
 
+  @test_util.run_deprecated_v1
   def testRemoteFunctionDirectSession(self):
     worker_config = config_pb2.ConfigProto()
     worker_config.device_count["CPU"] = 2
@@ -591,10 +617,11 @@ class FunctionalOpsTest(test.TestCase):
           target="/job:localhost/replica:0/task:0/cpu:1")
 
     with self.test_session(config=worker_config) as sess:
-      sess.run(variables.global_variables_initializer())
-      mul = sess.run(remote_op)
+      self.evaluate(variables.global_variables_initializer())
+      mul = self.evaluate(remote_op)
       self.assertEqual(mul, [6])
 
+  @test_util.run_deprecated_v1
   def testRemoteFunctionSameDeviceDirectSession(self):
 
     @function.Defun(dtypes.int32, dtypes.int32)
@@ -610,8 +637,8 @@ class FunctionalOpsTest(test.TestCase):
           args=[a, b], Tout=[dtypes.int32], f=_remote_fn, target="/cpu:0")
 
     with self.cached_session() as sess:
-      sess.run(variables.global_variables_initializer())
-      mul = sess.run(remote_op)
+      self.evaluate(variables.global_variables_initializer())
+      mul = self.evaluate(remote_op)
       self.assertEqual(mul, [6])
 
   def testRemoteFunctionCPUGPU(self):
@@ -634,8 +661,8 @@ class FunctionalOpsTest(test.TestCase):
           target="/job:localhost/replica:0/task:0/device:GPU:0")[0] + 3.0
 
     with self.cached_session() as sess:
-      sess.run(variables.global_variables_initializer())
-      mul = sess.run(remote_op)
+      self.evaluate(variables.global_variables_initializer())
+      mul = self.evaluate(remote_op)
       self.assertEqual(mul, 9.0)
 
   def testRemoteFunctionGPUCPU(self):
@@ -658,8 +685,8 @@ class FunctionalOpsTest(test.TestCase):
           target="/job:localhost/replica:0/task:0/cpu:0")[0] + 3.0
 
     with self.cached_session() as sess:
-      sess.run(variables.global_variables_initializer())
-      mul = sess.run(remote_op)
+      self.evaluate(variables.global_variables_initializer())
+      mul = self.evaluate(remote_op)
       self.assertEqual(mul, 9.0)
 
   def testRemoteFunctionGPUCPUStrings(self):
@@ -677,9 +704,10 @@ class FunctionalOpsTest(test.TestCase):
           args=[a], Tout=[dtypes.string], f=_remote_fn, target="/cpu:0")
 
     with self.cached_session() as sess:
-      ret = sess.run(remote_op)
+      ret = self.evaluate(remote_op)
       self.assertAllEqual(ret, [b"a"])
 
+  @test_util.run_deprecated_v1
   def testRemoteFunctionCrossProcess(self):
     workers, _ = test_util.create_local_cluster(2, 1)
 
@@ -699,10 +727,11 @@ class FunctionalOpsTest(test.TestCase):
           target="/job:worker/replica:0/task:1/cpu:0")[0] + 3.0
 
     with session.Session(workers[0].target) as sess:
-      sess.run(variables.global_variables_initializer())
-      mul = sess.run(remote_op)
+      self.evaluate(variables.global_variables_initializer())
+      mul = self.evaluate(remote_op)
       self.assertEqual(mul, 9)
 
+  @test_util.run_deprecated_v1
   def testIf(self):
 
     @function.Defun(dtypes.float32)
@@ -742,6 +771,27 @@ class FunctionalOpsTest(test.TestCase):
           self.assertAllEqual(Run(sess, 20.), 210.)
           self.assertAllEqual(Run(sess, 100.), 5050.)
 
+  # Like above, but using int32 in order to ensure that int32 tensors don't get
+  # copied to the GPU during the application of the while.
+  def testWhileInt32(self):
+    with ops.Graph().as_default() as g:
+
+      @function.Defun(*[dtypes.int32] * 2)
+      def Cond(n, unused_x):
+        return n > 0
+
+      @function.Defun(*[dtypes.int32] * 2)
+      def Body(n, x):
+        return n - 1, x + n
+
+      def Run(sess, n):
+        return sess.run(functional_ops.While([n, 0], Cond, Body))[1]
+
+      with self.session(graph=g, use_gpu=True) as sess:
+        self.assertAllEqual(Run(sess, 20), 210)
+        self.assertAllEqual(Run(sess, 100), 5050)
+
+  @test_util.run_deprecated_v1
   def testWhileLowering(self):
 
     def Run(n, fetch_by_name):
@@ -769,13 +819,16 @@ class FunctionalOpsTest(test.TestCase):
           else:
             fetch = "my_while:1"
         with self.session(graph=g, use_gpu=use_gpu) as sess:
-          return sess.run(fetch)
+          return self.evaluate(fetch)
 
     self.assertAllEqual(Run(20., False), 210.)
     self.assertAllEqual(Run(20., True), 210.)
     self.assertAllEqual(Run(100., False), 5050.)
     self.assertAllEqual(Run(100., True), 5050.)
 
+  @test_util.run_v1_only("b/120545219")
+  @test_util.disable_xla(
+      "This test never passed for XLA")  # Different error message
   def testWhileError(self):
     for use_gpu in (True, False):
       with ops.Graph().as_default() as g:
@@ -857,11 +910,11 @@ class FunctionalOpsTest(test.TestCase):
           result_binary = functional_ops.While(
               [1.0, 0., 0.],
               function.Defun(*[dtypes.float32] * 3)(TestCond), TestBinary)
-          sess.run(variables.global_variables_initializer())
+          self.evaluate(variables.global_variables_initializer())
           assert len(result_unary) == 2
-          self.assertEqual([10.0, 54.0], sess.run(result_unary))
+          self.assertEqual([10.0, 54.0], self.evaluate(result_unary))
           assert len(result_binary) == 3
-          self.assertEqual([10.0, 54.0, 9.0], sess.run(result_binary))
+          self.assertEqual([10.0, 54.0, 9.0], self.evaluate(result_binary))
 
           def TestCondCapture(n, *args):
             del args
@@ -892,7 +945,7 @@ class FunctionalOpsTest(test.TestCase):
                 100, 0, -1, [0.], Body, rewrite_with_while=rewrite_with_while)
             [0],
         ]
-        xvals = sess.run(xs)
+        xvals = self.evaluate(xs)
       self.assertAllEqual(210, xvals[0])
       self.assertAllEqual(5050, xvals[1])
 
@@ -922,6 +975,7 @@ class FunctionalOpsTest(test.TestCase):
     self.assertTrue("TestBody_Cond" in names)
     self.assertTrue("TestBody_Body" in names)
 
+  @test_util.run_deprecated_v1
   def testForCapturedInputs(self):
     v = variables.Variable(1.0)
 
@@ -949,16 +1003,16 @@ class FunctionalOpsTest(test.TestCase):
         result_binary = functional_ops.For(
             1, 10, 1, [0., 0.], TestBinary,
             rewrite_with_while=rewrite_with_while)
-        sess.run(variables.global_variables_initializer())
+        self.evaluate(variables.global_variables_initializer())
         assert not result_nullary
         # The nullary variant doesn't return anything so we can't easily run it.
         # As a total hack, fetch the operation by name and run it.
         sess.run(ops.get_default_graph().get_operation_by_name(
             "While" if rewrite_with_while else "For"))
         assert len(result_unary) == 1
-        self.assertEqual([54.0], sess.run(result_unary))
+        self.assertEqual([54.0], self.evaluate(result_unary))
         assert len(result_binary) == 2
-        self.assertEqual([54.0, 9.0], sess.run(result_binary))
+        self.assertEqual([54.0, 9.0], self.evaluate(result_binary))
 
   def _tfMLP(self, xval, wsval, bsval, rewrite_with_while):
     # On GPU, don't rewrite using a while loop.
@@ -996,12 +1050,15 @@ class FunctionalOpsTest(test.TestCase):
     tf_for_ans = self._tfMLP(xval, wsval, bsval, rewrite_with_while)
     self.assertAllClose(np_ans, tf_for_ans)
 
+  @test_util.run_deprecated_v1
   def testForMLP(self):
     self._testForMLP(False)
 
+  @test_util.run_deprecated_v1
   def testForMLPWhile(self):
     self._testForMLP(True)
 
+  @test_util.run_v1_only("b/120545219")
   def testForError(self):
 
     @function.Defun(dtypes.int32, dtypes.float32)
@@ -1024,6 +1081,7 @@ class FunctionalOpsTest(test.TestCase):
           "For loop body returned 2 arguments. Expected: 1"):
         functional_ops.For(0, 10, 1, [0.0], ReturnsTooManyArgs)[0].eval()
 
+  @test_util.run_deprecated_v1
   def testGradient(self):
 
     @function.Defun(dtypes.float32)
@@ -1041,14 +1099,16 @@ class FunctionalOpsTest(test.TestCase):
       avals = [Poly(a), Grad(a)]
       b = constant_op.constant(1.)
       bvals = [Poly(b), Grad(b)]
-      self.assertAllEqual(sess.run(avals), [8., 4.])
-      self.assertAllEqual(sess.run(bvals), [17., 16.])
+      self.assertAllEqual(self.evaluate(avals), [8., 4.])
+      self.assertAllEqual(self.evaluate(bvals), [17., 16.])
 
 
 # TODO(akshayka): Replace `function.Defun` with tf.contrib.eager.defun` in the
 # below test cases.
+@test_util.disable_all_xla("This test never passed for XLA")
 class PartitionedCallTest(test.TestCase):
 
+  @test_util.run_deprecated_v1
   def testBasicSingleDevice(self):
 
     @function.Defun(*[dtypes.float32] * 2)
@@ -1064,6 +1124,7 @@ class PartitionedCallTest(test.TestCase):
                   constant_op.constant(2.)], f=Body))
     self.assertEqual(output, 6.)
 
+  @test_util.run_deprecated_v1
   def testBasicMultiDevice(self):
     config = config_pb2.ConfigProto(device_count={"CPU": 3})
 
@@ -1107,6 +1168,7 @@ class PartitionedCallTest(test.TestCase):
                   constant_op.constant(2.)], f=Body))
     self.assertEqual(output, 6.)
 
+  @test_util.run_deprecated_v1
   def testBasicNoDeviceAnnotations(self):
 
     @function.Defun(*[dtypes.float32] * 2)
@@ -1121,6 +1183,7 @@ class PartitionedCallTest(test.TestCase):
                   constant_op.constant(2.)], f=Body))
     self.assertEqual(output, 6.)
 
+  @test_util.run_deprecated_v1
   def testShardsRunOnRequestedDevices(self):
     config = config_pb2.ConfigProto(device_count={"CPU": 4})
 
@@ -1150,6 +1213,7 @@ class PartitionedCallTest(test.TestCase):
     self.assertIn(compat.as_bytes("CPU:1"), outputs[1])
     self.assertIn(compat.as_bytes("CPU:2"), outputs[2])
 
+  @test_util.run_deprecated_v1
   def testAssignAddResourceVariable(self):
 
     v = resource_variable_ops.ResourceVariable(1.0)
@@ -1193,14 +1257,15 @@ class PartitionedCallTest(test.TestCase):
             allow_soft_placement=False,
             log_device_placement=True,
             device_count={"CPU": 2})) as sess:
-      sess.run(variables.global_variables_initializer())
-      expected = sess.run(sum_gather())
+      self.evaluate(variables.global_variables_initializer())
+      expected = self.evaluate(sum_gather())
       result = sess.run(
           functional_ops.partitioned_call(
               args=defined.captured_inputs, f=defined))
       self.assertAllEqual(expected, result)
 
   # Use an invalid executor name to test the plumbing of the executor_type attr.
+  @test_util.run_v1_only("b/120545219")
   def testExecutorTypeAttrExecutorNotFound(self):
     @function.Defun(dtypes.int32)
     def AddFive(x):

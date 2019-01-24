@@ -31,6 +31,7 @@ TfLiteRegistration* Register_RELU_1();
 
 namespace builtin {
 
+TfLiteRegistration* Register_ABS();
 TfLiteRegistration* Register_RELU();
 TfLiteRegistration* Register_RELU_N1_TO_1();
 TfLiteRegistration* Register_RELU6();
@@ -74,6 +75,7 @@ TfLiteRegistration* Register_GATHER();
 TfLiteRegistration* Register_TRANSPOSE();
 TfLiteRegistration* Register_MEAN();
 TfLiteRegistration* Register_SPLIT();
+TfLiteRegistration* Register_SPLIT_V();
 TfLiteRegistration* Register_SQUEEZE();
 TfLiteRegistration* Register_STRIDED_SLICE();
 TfLiteRegistration* Register_EXP();
@@ -92,6 +94,7 @@ TfLiteRegistration* Register_GREATER_EQUAL();
 TfLiteRegistration* Register_LESS();
 TfLiteRegistration* Register_LESS_EQUAL();
 TfLiteRegistration* Register_FLOOR();
+TfLiteRegistration* Register_CEIL();
 TfLiteRegistration* Register_TILE();
 TfLiteRegistration* Register_NEG();
 TfLiteRegistration* Register_SUM();
@@ -123,6 +126,12 @@ TfLiteRegistration* Register_SQUARE();
 TfLiteRegistration* Register_ZEROS_LIKE();
 TfLiteRegistration* Register_FLOOR_MOD();
 TfLiteRegistration* Register_RANGE();
+TfLiteRegistration* Register_LEAKY_RELU();
+TfLiteRegistration* Register_SQUARED_DIFFERENCE();
+TfLiteRegistration* Register_FILL();
+TfLiteRegistration* Register_MIRROR_PAD();
+TfLiteRegistration* Register_UNIQUE();
+TfLiteRegistration* Register_REVERSE_V2();
 
 TfLiteStatus UnsupportedTensorFlowOp(TfLiteContext* context, TfLiteNode* node) {
   context->ReportError(
@@ -152,6 +161,7 @@ const TfLiteRegistration* BuiltinOpResolver::FindOp(const char* op,
 }
 
 BuiltinOpResolver::BuiltinOpResolver() {
+  AddBuiltin(BuiltinOperator_ABS, Register_ABS());
   AddBuiltin(BuiltinOperator_RELU, Register_RELU());
   AddBuiltin(BuiltinOperator_RELU_N1_TO_1, Register_RELU_N1_TO_1());
   AddBuiltin(BuiltinOperator_RELU6, Register_RELU6());
@@ -160,22 +170,34 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_AVERAGE_POOL_2D, Register_AVERAGE_POOL_2D());
   AddBuiltin(BuiltinOperator_MAX_POOL_2D, Register_MAX_POOL_2D());
   AddBuiltin(BuiltinOperator_L2_POOL_2D, Register_L2_POOL_2D());
-  AddBuiltin(BuiltinOperator_CONV_2D, Register_CONV_2D());
+  AddBuiltin(BuiltinOperator_CONV_2D, Register_CONV_2D(),
+             /* min_version */ 1,
+             /* max_version */ 2);
   AddBuiltin(BuiltinOperator_DEPTHWISE_CONV_2D, Register_DEPTHWISE_CONV_2D(),
              /* min_version */ 1,
              /* max_version */ 2);
-  AddBuiltin(BuiltinOperator_SVDF, Register_SVDF());
-  AddBuiltin(BuiltinOperator_RNN, Register_RNN());
+  AddBuiltin(BuiltinOperator_SVDF, Register_SVDF(),
+             /* min_version */ 1,
+             /* max_version */ 2);
+  AddBuiltin(BuiltinOperator_RNN, Register_RNN(),
+             /* min_version */ 1,
+             /* max_version */ 2);
   AddBuiltin(BuiltinOperator_BIDIRECTIONAL_SEQUENCE_RNN,
-             Register_BIDIRECTIONAL_SEQUENCE_RNN());
+             Register_BIDIRECTIONAL_SEQUENCE_RNN(),
+             /* min_version */ 1,
+             /* max_version */ 2);
   AddBuiltin(BuiltinOperator_UNIDIRECTIONAL_SEQUENCE_RNN,
-             Register_UNIDIRECTIONAL_SEQUENCE_RNN());
-  AddBuiltin(BuiltinOperator_EMBEDDING_LOOKUP, Register_EMBEDDING_LOOKUP());
+             Register_UNIDIRECTIONAL_SEQUENCE_RNN(),
+             /* min_version */ 1,
+             /* max_version */ 2);
+  AddBuiltin(BuiltinOperator_EMBEDDING_LOOKUP, Register_EMBEDDING_LOOKUP(),
+             /* min_version */ 1,
+             /* max_version */ 2);
   AddBuiltin(BuiltinOperator_EMBEDDING_LOOKUP_SPARSE,
              Register_EMBEDDING_LOOKUP_SPARSE());
   AddBuiltin(BuiltinOperator_FULLY_CONNECTED, Register_FULLY_CONNECTED(),
              /* min_version */ 1,
-             /* max_version */ 2);
+             /* max_version */ 3);
   AddBuiltin(BuiltinOperator_LSH_PROJECTION, Register_LSH_PROJECTION());
   AddBuiltin(BuiltinOperator_HASHTABLE_LOOKUP, Register_HASHTABLE_LOOKUP());
   AddBuiltin(BuiltinOperator_SOFTMAX, Register_SOFTMAX());
@@ -188,11 +210,13 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_LOCAL_RESPONSE_NORMALIZATION,
              Register_LOCAL_RESPONSE_NORMALIZATION());
   AddBuiltin(BuiltinOperator_LSTM, Register_LSTM(), /* min_version */ 1,
-             /* max_version */ 2);
+             /* max_version */ 3);
   AddBuiltin(BuiltinOperator_BIDIRECTIONAL_SEQUENCE_LSTM,
-             Register_BIDIRECTIONAL_SEQUENCE_LSTM());
+             Register_BIDIRECTIONAL_SEQUENCE_LSTM(), /* min_version */ 1,
+             /* max_version */ 3);
   AddBuiltin(BuiltinOperator_UNIDIRECTIONAL_SEQUENCE_LSTM,
-             Register_UNIDIRECTIONAL_SEQUENCE_LSTM());
+             Register_UNIDIRECTIONAL_SEQUENCE_LSTM(), /* min_version */ 1,
+             /* max_version */ 2);
   AddBuiltin(BuiltinOperator_PAD, Register_PAD());
   AddBuiltin(BuiltinOperator_PADV2, Register_PADV2());
   AddBuiltin(BuiltinOperator_RESHAPE, Register_RESHAPE());
@@ -207,6 +231,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_DIV, Register_DIV());
   AddBuiltin(BuiltinOperator_SUB, Register_SUB());
   AddBuiltin(BuiltinOperator_SPLIT, Register_SPLIT());
+  AddBuiltin(BuiltinOperator_SPLIT_V, Register_SPLIT_V());
   AddBuiltin(BuiltinOperator_SQUEEZE, Register_SQUEEZE());
   AddBuiltin(BuiltinOperator_STRIDED_SLICE, Register_STRIDED_SLICE());
   AddBuiltin(BuiltinOperator_EXP, Register_EXP());
@@ -214,7 +239,9 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_LOG, Register_LOG());
   AddBuiltin(BuiltinOperator_LOG_SOFTMAX, Register_LOG_SOFTMAX());
   AddBuiltin(BuiltinOperator_CAST, Register_CAST());
-  AddBuiltin(BuiltinOperator_DEQUANTIZE, Register_DEQUANTIZE());
+  AddBuiltin(BuiltinOperator_DEQUANTIZE, Register_DEQUANTIZE(),
+             /* min_version */ 1,
+             /* max_version */ 2);
   AddBuiltin(BuiltinOperator_PRELU, Register_PRELU());
   AddBuiltin(BuiltinOperator_MAXIMUM, Register_MAXIMUM());
   AddBuiltin(BuiltinOperator_MINIMUM, Register_MINIMUM());
@@ -225,6 +252,7 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_LESS, Register_LESS());
   AddBuiltin(BuiltinOperator_LESS_EQUAL, Register_LESS_EQUAL());
   AddBuiltin(BuiltinOperator_FLOOR, Register_FLOOR());
+  AddBuiltin(BuiltinOperator_CEIL, Register_CEIL());
   AddBuiltin(BuiltinOperator_NEG, Register_NEG());
   AddBuiltin(BuiltinOperator_SELECT, Register_SELECT());
   AddBuiltin(BuiltinOperator_SLICE, Register_SLICE());
@@ -256,6 +284,12 @@ BuiltinOpResolver::BuiltinOpResolver() {
   AddBuiltin(BuiltinOperator_ZEROS_LIKE, Register_ZEROS_LIKE());
   AddBuiltin(BuiltinOperator_FLOOR_MOD, Register_FLOOR_MOD());
   AddBuiltin(BuiltinOperator_RANGE, Register_RANGE());
+  AddBuiltin(BuiltinOperator_LEAKY_RELU, Register_LEAKY_RELU());
+  AddBuiltin(BuiltinOperator_SQUARED_DIFFERENCE, Register_SQUARED_DIFFERENCE());
+  AddBuiltin(BuiltinOperator_FILL, Register_FILL());
+  AddBuiltin(BuiltinOperator_MIRROR_PAD, Register_MIRROR_PAD());
+  AddBuiltin(BuiltinOperator_UNIQUE, Register_UNIQUE());
+  AddBuiltin(BuiltinOperator_REVERSE_V2, Register_REVERSE_V2());
 
   // TODO(andrewharp, ahentz): Move these somewhere more appropriate so that
   // custom ops aren't always included by default.

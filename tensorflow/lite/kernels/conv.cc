@@ -24,7 +24,6 @@ limitations under the License.
 #include "tensorflow/lite/c/c_api_internal.h"
 #include "tensorflow/lite/kernels/eigen_support.h"
 #include "tensorflow/lite/kernels/gemm_support.h"
-#include "tensorflow/lite/kernels/internal/optimized/cblas_conv.h"
 #include "tensorflow/lite/kernels/internal/optimized/multithreaded_conv.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
@@ -134,16 +133,14 @@ void TransposeFloatTensor(TfLiteTensor* input, TfLiteTensor* output) {
 // Note: `context->AddTensors` might invalidate pointers to existing tensors.
 // Therefore the logic to add tensors are isolated into this function.
 static TfLiteStatus AllocateTemporaryTensorsIfRequired(TfLiteContext* context,
-                                                       TfLiteNode* node) {
+                                                       TfLiteNode* node,
+                                                       bool is_hybrid) {
   auto* params = reinterpret_cast<TfLiteConvParams*>(node->builtin_data);
   OpData* data = reinterpret_cast<OpData*>(node->user_data);
 
   TF_LITE_ENSURE(context, node->inputs->size >= 2);
   TfLiteTensor* input = &context->tensors[node->inputs->data[0]];
   TfLiteTensor* filter = &context->tensors[node->inputs->data[1]];
-
-  const bool is_hybrid =
-      (input->type == kTfLiteFloat32 && filter->type == kTfLiteUInt8);
 
   int filter_width = filter->dims->data[2];
   int filter_height = filter->dims->data[1];
@@ -251,7 +248,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   }
 
   const bool is_hybrid =
-      (input->type == kTfLiteFloat32 && filter->type == kTfLiteUInt8);
+      (input->type == kTfLiteFloat32 &&
+       (filter->type == kTfLiteUInt8 || filter->type == kTfLiteInt8));
 
   data->run_multithreaded_kernel = context->recommended_num_threads != 1;
   // Hybrid kernels don't support multithreading yet.
@@ -259,7 +257,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     data->run_multithreaded_kernel = false;
   }
 
-  TF_LITE_ENSURE_STATUS(AllocateTemporaryTensorsIfRequired(context, node));
+  TF_LITE_ENSURE_STATUS(
+      AllocateTemporaryTensorsIfRequired(context, node, is_hybrid));
 
   int channels_in = filter->dims->data[3];
   int channels_out = filter->dims->data[0];
@@ -335,7 +334,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         &context->tensors[node->temporaries->data[data->im2col_index]];
     im2col->type = input->type;
     if (is_hybrid) {
-      im2col->type = kTfLiteUInt8;
+      im2col->type = filter->type;
     }
     im2col->allocation_type = kTfLiteArenaRw;
     auto im2col_status = context->ResizeTensor(context, im2col, im2col_size);
@@ -373,7 +372,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         data->input_quantized_id;
     TfLiteTensor* input_quantized =
         GetTemporary(context, node, data->input_quantized_index);
-    input_quantized->type = kTfLiteUInt8;
+    input_quantized->type = kTfLiteInt8;
     input_quantized->allocation_type = kTfLiteArenaRw;
     if (!TfLiteIntArrayEqual(input_quantized->dims, input->dims)) {
       TfLiteIntArray* input_quantized_size = TfLiteIntArrayCopy(input->dims);
@@ -491,11 +490,10 @@ void EvalFloat(TfLiteContext* context, TfLiteNode* node,
   CalculateActivationRange(params->activation, &output_activation_min,
                            &output_activation_max);
   KernelType effective_kernel_type;
-  if ((kernel_type == kMultithreadOptimized ||
-       kernel_type == kCblasOptimized) &&
+  if ((kernel_type == kMultithreadOptimized) &&
       (params->dilation_width_factor != 1 ||
        params->dilation_height_factor != 1)) {
-    // kMultithreadOptimized and kCblasOptimized do not support dilation.
+    // kMultithreadOptimized does not support dilation.
     // Therefore, fallback to optimized.
     effective_kernel_type = kGenericOptimized;
   } else {
@@ -521,6 +519,7 @@ void EvalFloat(TfLiteContext* context, TfLiteNode* node,
                           GetTensorData<float>(im2col));
       break;
     }
+    case kCblasOptimized:
     case kGenericOptimized: {
       optimized_ops::Conv(op_params, GetTensorShape(input),
                           GetTensorData<float>(input), GetTensorShape(filter),
@@ -546,15 +545,6 @@ void EvalFloat(TfLiteContext* context, TfLiteNode* node,
           GetTensorData<float>(im2col));
       break;
     }
-    case kCblasOptimized: {
-      cblas_ops::Conv(op_params, GetTensorShape(input),
-                      GetTensorData<float>(input), GetTensorShape(filter),
-                      GetTensorData<float>(filter), GetTensorShape(bias),
-                      GetTensorData<float>(bias), GetTensorShape(output),
-                      GetTensorData<float>(output), GetTensorShape(im2col),
-                      GetTensorData<float>(im2col));
-      break;
-    }
   }
 }
 
@@ -572,8 +562,7 @@ void EvalHybrid(TfLiteContext* context, TfLiteNode* node,
 
   const TfLiteTensor* input_quantized =
       GetTemporary(context, node, data->input_quantized_index);
-  int8_t* quantized_input_ptr_batch =
-      reinterpret_cast<int8_t*>(input_quantized->data.uint8);
+  int8_t* quantized_input_ptr_batch = input_quantized->data.int8;
   float* scaling_factors_ptr =
       GetTemporary(context, node, data->scaling_factors_index)->data.f;
 
@@ -588,10 +577,21 @@ void EvalHybrid(TfLiteContext* context, TfLiteNode* node,
   }
 
   int8_t* im2col_ptr = nullptr;
-  if (im2col != nullptr) {
-    im2col_ptr = reinterpret_cast<int8_t*>(im2col->data.uint8);
+  int8_t* filter_ptr = nullptr;
+  if (filter->type == kTfLiteUInt8) {
+    // For backward compatibility, we need to support the case where filters
+    // are quantized to int8 but stored as uint8.
+    if (im2col != nullptr) {
+      im2col_ptr = reinterpret_cast<int8_t*>(im2col->data.uint8);
+    }
+    filter_ptr = reinterpret_cast<int8_t*>(filter->data.uint8);
+  } else {
+    // Code at head uses the int8 type so we do not need to do the cast.
+    if (im2col != nullptr) {
+      im2col_ptr = im2col->data.int8;
+    }
+    filter_ptr = filter->data.int8;
   }
-  int8_t* filter_ptr = reinterpret_cast<int8_t*>(filter->data.uint8);
 
   switch (kernel_type) {
     case kReference:
@@ -650,7 +650,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   // separate ops to avoid dispatch overhead here.
   switch (input->type) {  // Already know in/outtypes are same.
     case kTfLiteFloat32:
-      if (filter->type == kTfLiteUInt8) {
+      if (filter->type == kTfLiteUInt8 || filter->type == kTfLiteInt8) {
         EvalHybrid<kernel_type>(context, node, params, data, input, filter,
                                 bias, im2col, hwcn_weights, output);
       } else if (data->run_multithreaded_kernel) {

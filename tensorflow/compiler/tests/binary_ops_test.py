@@ -218,6 +218,21 @@ class BinaryOpsTest(xla_test.XLATestCase):
             ],
             equality_test=self.ListsAreClose)
 
+      # TF doesn't define these for bf16.
+      if dtype != dtypes.bfloat16.as_numpy_dtype:
+        self._testBinary(
+            gen_math_ops.xdivy,
+            np.array([0, 4, 3, 2, 1, 0], dtype=dtype),
+            np.array([0, 5, 6, 7, 8, float("NaN")], dtype=dtype),
+            expected=np.array([0, 0.8, 0.5, 0.285714, 0.125, 0], dtype=dtype))
+
+        self._testBinary(
+            gen_math_ops.xlogy,
+            np.array([0, 4, 3, 2, 1, 0], dtype=dtype),
+            np.array([0, 5, 6, 7, 8, float("NaN")], dtype=dtype),
+            expected=np.array([0, 6.437752, 5.375278, 3.89182, 2.079442, 0],
+                              dtype=dtype))
+
   def testIntOps(self):
     for dtype in self.signed_int_types:
       self._testBinary(
@@ -385,7 +400,7 @@ class BinaryOpsTest(xla_test.XLATestCase):
 
   def testComplexOps(self):
     for dtype in self.complex_types:
-      ctypes = {np.complex64: np.float32}
+      ctypes = {np.complex64: np.float32, np.complex128: np.float64}
       self._testBinary(
           math_ops.complex,
           np.array([[[[-1, 2], [2, 0]]]], dtype=ctypes[dtype]),

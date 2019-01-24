@@ -13,9 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Tensor summaries for exporting information about a model.
+"""Operations for writing summary data, for use in analysis and visualization.
 
-See the [Summary](https://tensorflow.org/api_guides/python/summary) guide.
+See the [Summaries and
+TensorBoard](https://www.tensorflow.org/guide/summaries_and_tensorboard) guide.
 """
 
 from __future__ import absolute_import
@@ -52,7 +53,7 @@ from tensorflow.python.util import compat as _compat
 from tensorflow.python.util.tf_export import tf_export
 
 
-@tf_export('summary.scalar')
+@tf_export(v1=['summary.scalar'])
 def scalar(name, tensor, collections=None, family=None):
   """Outputs a `Summary` protocol buffer containing a single scalar value.
 
@@ -82,7 +83,7 @@ def scalar(name, tensor, collections=None, family=None):
   return val
 
 
-@tf_export('summary.image')
+@tf_export(v1=['summary.image'])
 def image(name, tensor, max_outputs=3, collections=None, family=None):
   """Outputs a `Summary` protocol buffer with images.
 
@@ -138,7 +139,7 @@ def image(name, tensor, max_outputs=3, collections=None, family=None):
   return val
 
 
-@tf_export('summary.histogram')
+@tf_export(v1=['summary.histogram'])
 def histogram(name, values, collections=None, family=None):
   # pylint: disable=line-too-long
   """Outputs a `Summary` protocol buffer with a histogram.
@@ -179,7 +180,7 @@ def histogram(name, values, collections=None, family=None):
   return val
 
 
-@tf_export('summary.audio')
+@tf_export(v1=['summary.audio'])
 def audio(name, tensor, sample_rate, max_outputs=3, collections=None,
           family=None):
   # pylint: disable=line-too-long
@@ -228,7 +229,7 @@ def audio(name, tensor, sample_rate, max_outputs=3, collections=None,
   return val
 
 
-@tf_export('summary.text')
+@tf_export(v1=['summary.text'])
 def text(name, tensor, collections=None):
   """Summarizes textual data.
 
@@ -269,7 +270,7 @@ def text(name, tensor, collections=None):
   return t_summary
 
 
-@tf_export('summary.tensor_summary')
+@tf_export(v1=['summary.tensor_summary'])
 def tensor_summary(name,
                    tensor,
                    summary_description=None,
@@ -325,7 +326,7 @@ def tensor_summary(name,
   return val
 
 
-@tf_export('summary.merge')
+@tf_export(v1=['summary.merge'])
 def merge(inputs, collections=None, name=None):
   # pylint: disable=line-too-long
   """Merges summaries.
@@ -371,7 +372,7 @@ def merge(inputs, collections=None, name=None):
   return val
 
 
-@tf_export('summary.merge_all')
+@tf_export(v1=['summary.merge_all'])
 def merge_all(key=_ops.GraphKeys.SUMMARIES, scope=None, name=None):
   """Merges all summaries collected in the default graph.
 
@@ -404,7 +405,7 @@ def merge_all(key=_ops.GraphKeys.SUMMARIES, scope=None, name=None):
     return merge(summary_ops, name=name)
 
 
-@tf_export('summary.get_summary_description')
+@tf_export(v1=['summary.get_summary_description'])
 def get_summary_description(node_def):
   """Given a TensorSummary node_def, retrieve its SummaryDescription.
 

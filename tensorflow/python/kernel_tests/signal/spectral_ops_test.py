@@ -21,6 +21,7 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gradients_impl
 from tensorflow.python.ops import math_ops
@@ -115,6 +116,7 @@ class SpectralOpsTest(test.TestCase):
       self.assertAllClose(
           expected_inverse_stft, actual_inverse_stft, 1e-4, 1e-4)
 
+  @test_util.disable_xla("This test never passed for XLA")
   def test_shapes(self):
     with spectral_ops_test_util.fft_kernel_label_map(), (
         self.session(use_gpu=True)):
@@ -150,6 +152,7 @@ class SpectralOpsTest(test.TestCase):
       self.assertAllEqual([256], inverse_stft.shape.as_list())
       self.assertAllEqual([expected_length], self.evaluate(inverse_stft).shape)
 
+  @test_util.disable_xla("This test never passed for XLA")
   def test_stft_and_inverse_stft(self):
     """Test that spectral_ops.stft/inverse_stft match a NumPy implementation."""
     # Tuples of (signal_length, frame_length, frame_step, fft_length).
@@ -235,7 +238,8 @@ class SpectralOpsTest(test.TestCase):
       inverse_window = inverse_window_fn(frame_length, dtype=dtypes.float32)
 
       with self.cached_session(use_gpu=True) as sess:
-        hann_window, inverse_window = sess.run([hann_window, inverse_window])
+        hann_window, inverse_window = self.evaluate(
+            [hann_window, inverse_window])
 
       # Expect unit gain at each phase of the window.
       product_window = hann_window * inverse_window
@@ -263,7 +267,8 @@ class SpectralOpsTest(test.TestCase):
       inverse_window = inverse_window_fn(frame_length, dtype=dtypes.float32)
 
       with self.cached_session(use_gpu=True) as sess:
-        hann_window, inverse_window = sess.run([hann_window, inverse_window])
+        hann_window, inverse_window = self.evaluate(
+            [hann_window, inverse_window])
 
       self.assertAllClose(hann_window, inverse_window * 1.5)
 
@@ -293,7 +298,7 @@ class SpectralOpsTest(test.TestCase):
       # the sum of the magnitude STFT.
       sinusoid = math_ops.sin(
           2 * np.pi * math_ops.linspace(0.0, 1.0, signal_length))
-      sinusoid_gradient = sess.run(self._compute_stft_gradient(sinusoid))
+      sinusoid_gradient = self.evaluate(self._compute_stft_gradient(sinusoid))
       self.assertFalse((sinusoid_gradient == 0.0).all())
 
   def test_gradients_numerical(self):

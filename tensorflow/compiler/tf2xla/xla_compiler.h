@@ -150,12 +150,16 @@ class XlaCompiler {
 
     // For a TensorArray or Stack resource, what is the array's declared size?
     // (Used for lazy initialization.)
-    int64 tensor_array_size = -1;
+    int64 max_array_size = -1;
 
     // TensorArray resource parameters are passed as (array, gradient array 0,
     // ..., gradient array k), where the gradient arrays are in the same order
     // as `tensor_array_gradients`.
     std::set<string> tensor_array_gradients;
+
+    // dynamic dims to arg number map. Empty if no dynamic shapes.
+    std::map<int32, int32> dynamic_dim_to_arg_num_map;
+    bool is_pad_arg = false;
 
     bool operator==(const Argument& other) const;
 
@@ -420,7 +424,7 @@ class XlaCompiler {
                         XlaContext* context,
                         const std::map<int, int>& arg_cores,
                         std::vector<XlaExpression>* arg_expressions,
-                        std::vector<int>* input_mapping,
+                        std::vector<int>* input_to_args,
                         std::vector<xla::Shape>* input_shapes,
                         bool is_entry_computation);
 

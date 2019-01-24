@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/client/lib/math.h"
 
 #include "tensorflow/compiler/xla/client/lib/constants.h"
+#include "tensorflow/compiler/xla/primitive_util.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 
@@ -183,8 +184,8 @@ XlaOp Lgamma(XlaOp input) {
 
   XlaOp base_lanczos_coeff = ScalarLike(input, kBaseLanczosCoeff);
 
-  // If the input is less than 0.5 use Gauss's reflection formula:
-  // gamma(x) = pi / sin(pi * x) * gamma(1 - x)
+  // If the input is less than 0.5 use Euler's reflection formula:
+  // gamma(x) = pi / (sin(pi * x) * gamma(1 - x))
   XlaOp need_to_reflect = Lt(Real(input), one_half);
   XlaOp z = Select(need_to_reflect, -input, input - one);
 
@@ -236,7 +237,7 @@ XlaOp Digamma(XlaOp input) {
 
   XlaOp base_lanczos_coeff = ScalarLike(input, kBaseLanczosCoeff);
 
-  // If the input is less than 0.5 use Gauss's reflection formula:
+  // If the input is less than 0.5 use Euler's reflection formula:
   // digamma(x) = digamma(1 - x) - pi * cot(pi * x)
   XlaOp need_to_reflect = Lt(Real(input), one_half);
   XlaOp z = Select(need_to_reflect, -input, input - one);
@@ -268,17 +269,16 @@ XlaOp Digamma(XlaOp input) {
 // Implements Banker's rounding: numbers that are equidistant between two
 // integers are rounded towards even.
 XlaOp RoundToEven(XlaOp x) {
-  auto half = xla::ScalarLike(x, 0.5);
-  auto one = xla::ScalarLike(x, 1.0);
-  auto two = xla::ScalarLike(x, 2.0);
+  auto half = ScalarLike(x, 0.5);
+  auto one = ScalarLike(x, 1.0);
+  auto two = ScalarLike(x, 2.0);
 
-  auto round_val = xla::Floor(x);
+  auto round_val = Floor(x);
   auto fraction = x - round_val;
-  auto nearest_even_int = round_val - two * xla::Floor(half * x);
-  auto is_odd = xla::Eq(nearest_even_int, one);
-  return xla::Select(xla::Or(xla::Gt(fraction, half),
-                             xla::And(xla::Eq(fraction, half), is_odd)),
-                     round_val + one, round_val);
+  auto nearest_even_int = round_val - two * Floor(half * x);
+  auto is_odd = Eq(nearest_even_int, one);
+  return Select(Or(Gt(fraction, half), And(Eq(fraction, half), is_odd)),
+                round_val + one, round_val);
 }
 
 // Trigonometric functions.
@@ -319,5 +319,15 @@ XlaOp Atanh(XlaOp x) {
 XlaOp Cosh(XlaOp x) { return (Exp(x) + Exp(-x)) * ScalarLike(x, 0.5); }
 
 XlaOp Sinh(XlaOp x) { return (Exp(x) - Exp(-x)) * ScalarLike(x, 0.5); }
+
+XlaOp MaybeConjugate(XlaOp x, bool conjugate) {
+  XlaBuilder* builder = x.builder();
+  return builder->ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
+    TF_ASSIGN_OR_RETURN(Shape shape, builder->GetShape(x));
+    auto perform_conj =
+        primitive_util::IsComplexType(shape.element_type()) && conjugate;
+    return perform_conj ? Conj(x) : x;
+  });
+}
 
 }  // namespace xla

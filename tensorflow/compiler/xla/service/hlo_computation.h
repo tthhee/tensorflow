@@ -301,7 +301,7 @@ class HloComputation {
   // be a topological sort of all instructions in the computation.
   template <typename HloInstructionPtr>
   Status AcceptOrdered(DfsHloVisitorBase<HloInstructionPtr>* visitor,
-                       const std::vector<const HloInstruction*>& order) const;
+                       absl::Span<HloInstruction* const> order) const;
 
   // Same as Accept() above, but the visitor is given as a function.
   Status Accept(const std::function<Status(HloInstruction*)>& visitor_func);
@@ -323,11 +323,15 @@ class HloComputation {
   // that's not already in the computation, it's cloned and added to the new
   // computation.
   //
+  // 'extra_parameters' allows to specify additional parameters that should be
+  // added to the computation.
+  //
   // All relevant instructions are cloned, *including* unique_ptr in the
   // `replacements` map.
   std::unique_ptr<HloComputation> CloneWithReplacements(
       std::unordered_map<const HloInstruction*, std::unique_ptr<HloInstruction>>
           replacements,
+      absl::Span<const HloInstruction* const> extra_parameters = {},
       HloCloneContext* context = nullptr, const string& suffix = "clone");
 
   // Convenience overloads for CloneWithReplacements.  You want to do
@@ -367,7 +371,7 @@ class HloComputation {
 
   // Returns a map from channel-id to directed dependencies of the channel
   // instructions. For send&recv pairs it means the send instruction and for
-  // cross-replica-sum the union of the dependencies for all participating
+  // all-reduce the union of the dependencies for all participating
   // instructions.
   using ChannelDependencyMap =
       absl::flat_hash_map<int64, absl::InlinedVector<HloInstruction*, 1>>;

@@ -9,6 +9,7 @@ package_group(
         "//tensorflow/compiler/jit/...",
         "//tensorflow/compiler/tests/...",
         "//tensorflow/compiler/tf2xla/...",
+        "//tensorflow/contrib/compiler/...",
     ],
 )
 
@@ -211,7 +212,6 @@ cc_library(
         "//tensorflow/compiler/xla/client:xla_computation",
         "//tensorflow/compiler/xla/client/lib:arithmetic",
         "//tensorflow/compiler/xla/client/lib:constants",
-        "//tensorflow/compiler/xla/client/lib:numeric",
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
@@ -244,6 +244,7 @@ cc_library(
     deps = [
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla:shape_util",
+        "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
@@ -445,14 +446,9 @@ cc_library(
     ],
     deps = [
         "//tensorflow/compiler/jit:flags",
-        "//tensorflow/compiler/xla:parse_flags_from_env",
-        "//tensorflow/core:core_cpu",
-        "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
-        "//tensorflow/core:framework_internal",
-        "//tensorflow/core:lib",
+        "//tensorflow/core:graph",
         "//tensorflow/core:protos_all_cc",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -673,6 +669,7 @@ cc_library(
     name = "side_effect_util",
     srcs = ["side_effect_util.cc"],
     hdrs = ["side_effect_util.h"],
+    visibility = [":friends"],
     deps = [
         "//tensorflow/core:core_cpu",
         "@com_google_absl//absl/strings",

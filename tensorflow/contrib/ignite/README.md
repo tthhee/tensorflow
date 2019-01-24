@@ -30,7 +30,8 @@ system based on Apache Ignite.
 
 ## Features
 
-Ignite Dataset provides features that that you can use in a wide range of cases. The most important and interesting features are described below.
+Ignite Dataset provides features that you can use in a wide range of cases. The
+most important and interesting features are described below.
 
 ### Distributed In-Memory Datasource
 [Apache Ignite](https://ignite.apache.org/) is a distributed in-memory database, caching, and processing platform that provides fast data access. It allows you to avoid limitations of hard drive and store and operate with as much data as you need in distributed cluster. You can utilize
@@ -54,14 +55,12 @@ jdbc:ignite:thin://localhost/> INSERT INTO KITTEN_CACHE VALUES (3, 'LITTLE BALL 
 ```python
 >>> import tensorflow as tf
 >>> from tensorflow.contrib.ignite import IgniteDataset
->>> 
->>> dataset = IgniteDataset(cache_name="SQL_PUBLIC_KITTEN_CACHE")
->>> iterator = dataset.make_one_shot_iterator()
->>> next_obj = iterator.get_next()
+>>> tf.enable_eager_execution()
 >>>
->>> with tf.Session() as sess:
->>>   for _ in range(3):
->>>     print(sess.run(next_obj))
+>>> dataset = IgniteDataset(cache_name="SQL_PUBLIC_KITTEN_CACHE")
+>>>
+>>> for element in dataset:
+>>>   print(element)
 
 {'key': 1, 'val': {'NAME': b'WARM KITTY'}}
 {'key': 2, 'val': {'NAME': b'SOFT KITTY'}}
@@ -74,23 +73,22 @@ jdbc:ignite:thin://localhost/> INSERT INTO KITTEN_CACHE VALUES (3, 'LITTLE BALL 
 ```python
 >>> import tensorflow as tf
 >>> from tensorflow.contrib.ignite import IgniteDataset
->>> 
->>> dataset = IgniteDataset(cache_name="IMAGES")
->>> iterator = dataset.make_one_shot_iterator()
->>> next_obj = iterator.get_next()
+>>> tf.enable_eager_execution()
 >>>
->>> with tf.Session() as sess:
->>>   print(sess.run(next_obj))
+>>> dataset = IgniteDataset(cache_name="IMAGES")
+>>>
+>>> for element in dataset.take(1):
+>>>   print(element)
 
 {
-    'key': 'kitten.png', 
+    'key': 'kitten.png',
     'val': {
         'metadata': {
             'file_name': b'kitten.png',
             'label': b'little ball of fur',
-            width: 800, 
+            width: 800,
             height: 600
-        }, 
+        },
         'pixels': [0, 0, 0, 0, ..., 0]
     }
 }
@@ -100,13 +98,11 @@ jdbc:ignite:thin://localhost/> INSERT INTO KITTEN_CACHE VALUES (3, 'LITTLE BALL 
 ```python
 >>> import tensorflow as tf
 >>> from tensorflow.contrib.ignite import IgniteDataset
->>> 
->>> dataset = IgniteDataset(cache_name="IMAGES").map(lambda obj: obj['val']['pixels'])
->>> iterator = dataset.make_one_shot_iterator()
->>> next_obj = iterator.get_next()
 >>>
->>> with tf.Session() as sess:
->>>   print(sess.run(next_obj))
+>>> dataset = IgniteDataset(cache_name="IMAGES").map(lambda obj: obj['val']['pixels'])
+>>>
+>>> for element in dataset:
+>>>   print(element)
 
 [0, 0, 0, 0, ..., 0]
 ```
@@ -126,18 +122,18 @@ Ignite Dataset allows using these two aspects of distributed neural network trai
 ```python
 >>> import tensorflow as tf
 >>> from tensorflow.contrib.ignite import IgniteDataset
->>> 
+>>>
 >>> dataset = IgniteDataset("IMAGES")
 >>>
 >>> # Compute gradients locally on every worker node.
->>> gradients = []    
+>>> gradients = []
 >>> for i in range(5):
 >>>     with tf.device("/job:WORKER/task:%d" % i):
->>>         device_iterator = dataset.make_one_shot_iterator()
+>>>         device_iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
 >>>         device_next_obj = device_iterator.get_next()
 >>>         gradient = compute_gradient(device_next_obj)
->>>         gradients.append(gradient)        
->>>        
+>>>         gradients.append(gradient)
+>>>
 >>> # Aggregate them on master node.
 >>> result_gradient = tf.reduce_sum(gradients)
 >>>
@@ -145,7 +141,7 @@ Ignite Dataset allows using these two aspects of distributed neural network trai
 >>>     print(sess.run(result_gradient))
 ```
 
-High-level TensorFlow API for [distributed training](https://www.tensorflow.org/api_docs/python/tf/contrib/distribute/DistributionStrategy) is supported as well. 
+High-level TensorFlow API for [distributed training](https://www.tensorflow.org/api_docs/python/tf/contrib/distribute/DistributionStrategy) is supported as well.
 
 ### Distributed File System
 

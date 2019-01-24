@@ -17,6 +17,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import functools
+import weakref
 
 from tensorflow.python.eager import backprop
 from tensorflow.python.eager import def_function
@@ -24,6 +26,7 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_spec
+from tensorflow.python.framework import test_util
 from tensorflow.python.keras.engine import training
 from tensorflow.python.keras.layers import core
 from tensorflow.python.ops import math_ops
@@ -50,6 +53,28 @@ class _ModelWithOptimizer(training.Model):
     gradients = tape.gradient(loss, trainable_variables)
     self.optimizer.apply_gradients(zip(gradients, trainable_variables))
     return {'loss': loss}
+
+
+class _HasDecoratedMethod(object):
+
+  @def_function.function
+  def f(self, x):
+    return x * 3.
+
+# pylint: disable=bad-continuation,anomalous-backslash-in-string
+MIXING_GRAPH_EAGER_TENSORS_ERROR = (
+"""An op outside of the function building code is being passed
+a "Graph" tensor. It is possible to have Graph tensors
+leak out of the function building context by including a
+tf.init_scope in your function building code.
+For example, the following function will fail:
+  @tf.function
+  def has_init_scope\(\):
+    my_constant = tf.constant\(1.\)
+    with tf.init_scope\(\):
+      added = my_constant \* 2
+The graph tensor has name: Const:0""")
+# pylint: enable=bad-continuation,anomalous-backslash-in-string
 
 
 class DefFunctionTest(test.TestCase):
@@ -149,9 +174,9 @@ class DefFunctionTest(test.TestCase):
 
       result = fn(3.0)
 
-      sess.run(variables.global_variables_initializer())
+      self.evaluate(variables.global_variables_initializer())
       self.assertAllEqual(sess.run(state[0]), 2.0)
-      self.assertAllEqual(sess.run(result), 6.0)
+      self.assertAllEqual(self.evaluate(result), 6.0)
 
   def testLegacyGraphModeVariablesNonTrivialInitializer(self):
     with ops.Graph().as_default(), self.test_session() as sess:
@@ -168,9 +193,9 @@ class DefFunctionTest(test.TestCase):
 
       result = fn(3.0)
 
-      sess.run(variables.global_variables_initializer())
+      self.evaluate(variables.global_variables_initializer())
       self.assertAllEqual(sess.run(state[0]), 6.0)
-      self.assertAllEqual(sess.run(result), 18.0)
+      self.assertAllEqual(self.evaluate(result), 18.0)
 
   def testLegacyGraphModeInputDependentInitializerFails(self):
     with ops.Graph().as_default():
@@ -207,6 +232,18 @@ class DefFunctionTest(test.TestCase):
     m1 = MyModel()
     self.assertAllEqual(m1.apply(3.0), 6.0)
 
+  def test_functools_partial(self):
+    self.assertAllClose(
+        3.,
+        def_function.function(functools.partial(lambda x, y: x + y, 1.))(
+            constant_op.constant(2.)))
+
+  def test_unspecified_default_argument(self):
+    wrapped = def_function.function(
+        lambda x, y=2: x + y,
+        input_signature=[tensor_spec.TensorSpec((), dtypes.int32)])
+    self.assertEqual(3, wrapped(constant_op.constant(1)).numpy())
+
   def test_optimizer(self):
     x = constant_op.constant([[3., 4.]])
     y = constant_op.constant([2.])
@@ -225,6 +262,66 @@ class DefFunctionTest(test.TestCase):
     concrete = compute.get_concrete_function(
         tensor_spec.TensorSpec(None, dtypes.float32))
     self.assertAllClose(4., concrete(constant_op.constant(2.)))
+    signature_args, _ = concrete.structured_input_signature
+    self.assertEqual(signature_args,
+                     (tensor_spec.TensorSpec(None, dtypes.float32),))
+
+  def test_serialization_signature_cache(self):
+
+    @def_function.function
+    def f(x, y):
+      return x, y
+
+    f(constant_op.constant([[3., 4.]]), constant_op.constant([2.]))
+    f(constant_op.constant([[3, 4, 5]]), constant_op.constant([2]))
+
+    signatures_args = set()
+    concrete_functions = f._list_all_concrete_functions_for_serialization()
+    for concrete_function in concrete_functions:
+      args, kwargs = concrete_function.structured_input_signature
+      signatures_args.add(args)
+      self.assertEqual(dict(), kwargs)
+
+    self.assertEqual(
+        signatures_args,
+        set(((tensor_spec.TensorSpec([1, 2], dtypes.float32),
+              tensor_spec.TensorSpec([1], dtypes.float32)),
+             (tensor_spec.TensorSpec([1, 3], dtypes.int32),
+              tensor_spec.TensorSpec([1], dtypes.int32)))))
+
+  @test_util.assert_no_garbage_created
+  def testFunctionReferenceCycles(self):
+    fn = def_function.function(lambda x: 2. * x)
+    fn(constant_op.constant(4.0))
+    weak_fn = weakref.ref(fn)
+    del fn
+    # Tests that the weak reference we made to the function is now dead, which
+    # means the object has been deleted. This should be true as long as the
+    # function itself is not involved in a reference cycle.
+    self.assertIs(None, weak_fn())
+
+  @test_util.assert_no_garbage_created
+  def testMethodReferenceCycles(self):
+    has_decorated_method = _HasDecoratedMethod()
+    has_decorated_method.f(constant_op.constant(5.))
+    weak_fn = weakref.ref(has_decorated_method.f)
+    del has_decorated_method
+    # Tests that the weak reference we made to the function is now dead, which
+    # means the object has been deleted. This should be true as long as the
+    # function itself is not involved in a reference cycle.
+    self.assertIs(None, weak_fn())
+
+  def testErrorMessageWhenGraphTensorIsPassedToEager(self):
+
+    @def_function.function
+    def failing_function():
+      a = constant_op.constant(1.)
+
+      with ops.init_scope():
+        _ = a + a
+
+    with self.assertRaisesRegexp(TypeError, MIXING_GRAPH_EAGER_TENSORS_ERROR):
+      failing_function()
 
 
 if __name__ == '__main__':

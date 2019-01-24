@@ -33,7 +33,7 @@ except ImportError:
   from distutils.spawn import find_executable as which
 # pylint: enable=g-import-not-at-top
 
-_DEFAULT_CUDA_VERSION = '9.0'
+_DEFAULT_CUDA_VERSION = '10.0'
 _DEFAULT_CUDNN_VERSION = '7'
 _DEFAULT_CUDA_COMPUTE_CAPABILITIES = '3.5,7.0'
 _DEFAULT_CUDA_PATH = '/usr/local/cuda'
@@ -238,6 +238,13 @@ def setup_python(environ_cp):
   write_to_bazelrc('build --python_path=\"%s"' % python_bin_path)
   environ_cp['PYTHON_BIN_PATH'] = python_bin_path
 
+  # If choosen python_lib_path is from a path specified in the PYTHONPATH
+  # variable, need to tell bazel to include PYTHONPATH
+  if environ_cp.get('PYTHONPATH'):
+    python_paths = environ_cp.get('PYTHONPATH').split(':')
+    if python_lib_path in python_paths:
+      write_action_env_to_bazelrc('PYTHONPATH', environ_cp.get('PYTHONPATH'))
+
   # Write tools/python_bin_path.sh
   with open(
       os.path.join(_TF_WORKSPACE_ROOT, 'tools', 'python_bin_path.sh'),
@@ -248,18 +255,6 @@ def setup_python(environ_cp):
 def reset_tf_configure_bazelrc():
   """Reset file that contains customized config settings."""
   open(_TF_BAZELRC, 'w').close()
-  bazelrc_path = os.path.join(_TF_WORKSPACE_ROOT, '.bazelrc')
-
-  data = []
-  if os.path.exists(bazelrc_path):
-    with open(bazelrc_path, 'r') as f:
-      data = f.read().splitlines()
-  with open(bazelrc_path, 'w') as f:
-    for l in data:
-      if _TF_BAZELRC_FILENAME in l:
-        continue
-      f.write('%s\n' % l)
-    f.write('import %%workspace%%/%s\n' % _TF_BAZELRC_FILENAME)
 
 def cleanup_makefile():
   """Delete any leftover BUILD files from the Makefile build.
@@ -445,11 +440,12 @@ def convert_version_to_int(version):
   return int(version_str)
 
 
-def check_bazel_version(min_version):
-  """Check installed bazel version is at least min_version.
+def check_bazel_version(min_version, max_version):
+  """Check installed bazel version is between min_version and max_version.
 
   Args:
     min_version: string for minimum bazel version.
+    max_version: string for maximum bazel version.
 
   Returns:
     The bazel version detected.
@@ -467,6 +463,7 @@ def check_bazel_version(min_version):
 
   min_version_int = convert_version_to_int(min_version)
   curr_version_int = convert_version_to_int(curr_version)
+  max_version_int = convert_version_to_int(max_version)
 
   # Check if current bazel version can be detected properly.
   if not curr_version_int:
@@ -479,7 +476,14 @@ def check_bazel_version(min_version):
   if curr_version_int < min_version_int:
     print('Please upgrade your bazel installation to version %s or higher to '
           'build TensorFlow!' % min_version)
-    sys.exit(0)
+    sys.exit(1)
+  if (curr_version_int > max_version_int and
+      'TF_IGNORE_MAX_BAZEL_VERSION' not in os.environ):
+    print('Please downgrade your bazel installation to version %s or lower to '
+          'build TensorFlow! To downgrade: download the installer for the old '
+          'version (from https://github.com/bazelbuild/bazel/releases) then '
+          'run the installer.' % max_version)
+    sys.exit(1)
   return curr_version
 
 
@@ -859,7 +863,7 @@ def set_tf_cuda_version(environ_cp):
     cuda_toolkit_paths_full = [
         os.path.join(cuda_toolkit_path, x) for x in cuda_rt_lib_paths
     ]
-    if any([os.path.exists(x) for x in cuda_toolkit_paths_full]):
+    if any(os.path.exists(x) for x in cuda_toolkit_paths_full):
       break
 
     # Reset and retry
@@ -1552,11 +1556,9 @@ def main():
   # environment variables.
   environ_cp = dict(os.environ)
 
-  check_bazel_version('0.15.0')
+  check_bazel_version('0.19.0', '0.21.0')
 
   reset_tf_configure_bazelrc()
-  # Explicitly import tools/bazel.rc, this is needed for Bazel 0.19.0 or later
-  write_to_bazelrc('import %workspace%/tools/bazel.rc')
 
   cleanup_makefile()
   setup_python(environ_cp)
@@ -1692,8 +1694,9 @@ def main():
   config_info_line('noaws', 'Disable AWS S3 filesystem support.')
   config_info_line('nogcp', 'Disable GCP support.')
   config_info_line('nohdfs', 'Disable HDFS support.')
-  config_info_line('noignite', 'Disable Apacha Ignite support.')
+  config_info_line('noignite', 'Disable Apache Ignite support.')
   config_info_line('nokafka', 'Disable Apache Kafka support.')
+  config_info_line('nonccl', 'Disable NVIDIA NCCL support.')
 
 
 if __name__ == '__main__':

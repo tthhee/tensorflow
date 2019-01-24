@@ -291,6 +291,13 @@ message RPCOptions {
   // transport for client-master communication that avoids the RPC
   // stack. This option is primarily for used testing the RPC stack.
   bool use_rpc_for_inprocess_master = 1;
+
+  // The compression algorithm to be used. One of "deflate", "gzip".
+  string compression_algorithm = 2;
+
+  // If compression_algorithm is set, the compression level to be used.
+  // From 0 (no compression), up to 3.
+  int32 compression_level = 3;
 };
 
 // Session configuration parameters.
@@ -418,6 +425,10 @@ message ConfigProto {
     // use NUMA affinity where applicable.  One consequence will be the
     // existence of as many CPU devices as there are available NUMA nodes.
     bool use_numa_affinity = 5;
+
+    // If true, make collective op execution order sequential and deterministic
+    // for potentially concurrent collective instances.
+    bool collective_deterministic_sequential_execution = 6;
   };
 
   Experimental experimental = 16;

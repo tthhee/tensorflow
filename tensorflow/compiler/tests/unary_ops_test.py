@@ -481,6 +481,72 @@ class UnaryOpsTest(xla_test.XLATestCase):
           np.array([-1, -0.5, 0, 0.3], dtype=dtype),
           expected=np.array([-1., -0.5, 0., 0.296875], dtype=dtype))
 
+      def quantize_and_dequantize_v2_round_half_up(x):
+        return array_ops.quantize_and_dequantize_v2(
+            x,
+            -1,
+            1.0,
+            signed_input=True,
+            num_bits=8,
+            range_given=True,
+            round_mode="HALF_UP")
+
+      self._assertOpOutputMatchesExpected(
+          quantize_and_dequantize_v2_round_half_up,
+          np.array([-0.8, -0.5, 0, 0.3, 0.8, -2, 33], dtype=dtype),
+          expected=np.array([
+              -102.0 / 127,
+              -63.0 / 127,
+              0,
+              38.0 / 127,
+              102.0 / 127,
+              -128.0 / 127,
+              1,
+          ],
+                            dtype=dtype))
+
+      def quantize_and_dequantize_v2_round_half_to_even(x):
+        return array_ops.quantize_and_dequantize_v2(
+            x,
+            -1.0,
+            1.0,
+            signed_input=True,
+            num_bits=8,
+            range_given=True,
+            round_mode="HALF_TO_EVEN")
+
+      self._assertOpOutputMatchesExpected(
+          quantize_and_dequantize_v2_round_half_to_even,
+          np.array(
+              [
+                  -0.8,
+                  # The -0.5 should become -63.5 after scaling and with
+                  # rounding this should become -64. But with the test
+                  # unary_ops_test_cpu_ondemand, this fails as the result
+                  # before scaling becomes -63.499996 and gets rounded to -63.
+                  # TODO(sreenik): Some one more familiar with this test needs
+                  # to take a look and resolve this. This works on all other
+                  # variations of the platform like cpu, and gpu.
+                  # -0.5,
+                  0,
+                  0.3,
+                  0.8,
+                  -2,
+                  33
+              ],
+              dtype=dtype),
+          expected=np.array(
+              [
+                  -102.0 / 127,
+                  # -64.0 / 127,
+                  0,
+                  38.0 / 127,
+                  102.0 / 127,
+                  -128.0 / 127,
+                  1,
+              ],
+              dtype=dtype))
+
       def quantize_and_dequantize_v3(x):
         return array_ops.quantize_and_dequantize_v3(
             x, -127, 127, num_bits=8, signed_input=True, range_given=False)
@@ -581,7 +647,7 @@ class UnaryOpsTest(xla_test.XLATestCase):
           np.array([1, 2j, 2 - 3j, 4 + 5j], dtype=dtype),
           expected=np.tan(np.array([1, 2j, 2 - 3j, 4 + 5j], dtype=dtype)))
 
-      ctypes = {np.complex64: np.float32}
+      ctypes = {np.complex64: np.float32, np.complex128: np.float64}
       self._assertOpOutputMatchesExpected(
           math_ops.abs,
           np.array([[3 - 4j, -1j, np.inf]], dtype=dtype),

@@ -101,7 +101,7 @@ class IrEmitter : public DfsHloVisitorWithDefault,
   StatusOr<llvm::Function*> EmitComputation(
       HloComputation* computation, const string& function_name_prefix,
       bool is_top_level_computation,
-      const std::vector<const HloInstruction*>* instruction_order);
+      absl::Span<HloInstruction* const> instruction_order);
 
   llvm::IRBuilder<>* b() { return &b_; }
 
@@ -134,7 +134,7 @@ class IrEmitter : public DfsHloVisitorWithDefault,
   Status HandleDot(HloInstruction* dot) override;
   Status HandleConvolution(HloInstruction* convolution) override;
   Status HandleFft(HloInstruction* fft) override;
-  Status HandleCrossReplicaSum(HloInstruction* crs) override;
+  Status HandleAllReduce(HloInstruction* crs) override;
   Status HandleInfeed(HloInstruction* infeed) override;
   Status HandleOutfeed(HloInstruction* outfeed) override;
   Status HandleSort(HloInstruction* sort) override;
@@ -159,7 +159,8 @@ class IrEmitter : public DfsHloVisitorWithDefault,
   Status HandleConcatenate(HloInstruction* concatenate) override;
   Status HandleConditional(HloInstruction* conditional) override;
   Status HandleScatter(HloInstruction* scatter) override;
-  Status HandleAfterAll(HloInstruction* gen_token) override;
+  Status HandleAfterAll(HloInstruction* after_all) override;
+  Status HandleAddDependency(HloInstruction* add_dependency) override;
   Status HandleRng(HloInstruction* rng) override;
   Status FinishVisit(HloInstruction* root) override;
 
@@ -248,14 +249,6 @@ class IrEmitter : public DfsHloVisitorWithDefault,
   // Emits code that computes the address of the given buffer allocation slice.
   llvm::Value* EmitBufferPointer(const BufferAllocation::Slice& slice,
                                  const Shape& target_shape);
-
-  // Emits a function into the current module. This can be used for
-  // computations embedded inside other computations, such as the
-  // function that a map operation applies.
-  StatusOr<llvm::Function*> EmitFunction(
-      HloComputation* function,  // The function to emit.
-      absl::string_view
-          function_name_suffix);  // Used for LLVM IR register names.
 
   // Emits a call to a thread local function (e.g. to the computation nested
   // within a reduce or a map).  Thread local callees (by definition) only write
@@ -447,7 +440,7 @@ class IrEmitter : public DfsHloVisitorWithDefault,
       computation_to_profile_idx_;
 
   // Maps HLOs to Values emitted for them.
-  std::unordered_map<const HloInstruction*, llvm::Value*> emitted_value_;
+  absl::flat_hash_map<const HloInstruction*, llvm::Value*> emitted_value_;
 
   llvm_ir::AliasAnalysis alias_analysis_;
 
@@ -467,9 +460,8 @@ class IrEmitter : public DfsHloVisitorWithDefault,
   // profiling a computation.
   class ProfilingState {
    public:
-    ProfilingState() : use_rdtscp_(false), prof_counters_(nullptr) {}
-    ProfilingState(bool use_rdtscp, llvm::Value* prof_counters)
-        : use_rdtscp_(use_rdtscp), prof_counters_(prof_counters) {}
+    ProfilingState() : use_rdtscp_(false) {}
+    explicit ProfilingState(bool use_rdtscp) : use_rdtscp_(use_rdtscp) {}
 
     // Record the cycle counter before an HLO executes.
     void RecordCycleStart(llvm::IRBuilder<>* b, HloInstruction* hlo);
@@ -493,9 +485,6 @@ class IrEmitter : public DfsHloVisitorWithDefault,
     // Should we use the x86-specific rdtscp or the generic readcyclecounter
     // intrinsic?
     bool use_rdtscp_;
-
-    // The argument which corresponds to the profile counter buffer.
-    llvm::Value* prof_counters_;
 
     // The first read cycle counter in the program.
     llvm::Value* first_read_cycle_start_ = nullptr;
